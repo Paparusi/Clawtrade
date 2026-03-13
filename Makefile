@@ -1,4 +1,4 @@
-.PHONY: build run test clean
+.PHONY: build run test clean lint
 
 BINARY=clawtrade
 BUILD_DIR=bin

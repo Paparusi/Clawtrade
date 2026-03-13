@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-	fmt.Printf("Clawtrade %s\n", internal.Version)
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: clawtrade <command>")
 		fmt.Println("Commands: version, serve")
