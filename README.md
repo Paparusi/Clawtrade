@@ -127,6 +127,22 @@ clawtrade agent set auto_trade true
 clawtrade agent watchlist add SOL/USDT
 ```
 
+### AI Models (LLM Provider)
+```bash
+clawtrade models setup               # Interactive LLM provider setup
+clawtrade models set anthropic/claude-sonnet-4-6  # Set model directly
+clawtrade models list                # List all providers & models
+clawtrade models status              # Show current model config
+```
+
+Supported providers: **Anthropic** (Claude), **OpenAI** (GPT), **OpenRouter**, **DeepSeek**, **Google** (Gemini), **Ollama** (local/free)
+
+API keys via environment variables or encrypted vault:
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-proj-...
+```
+
 ### Notifications
 ```bash
 clawtrade telegram setup             # Setup Telegram bot
@@ -160,6 +176,10 @@ agent:
   enabled: true
   auto_trade: false
   min_confidence: 0.7
+  model:
+    primary: "anthropic/claude-sonnet-4-6"
+    max_tokens: 4096
+    temperature: 0.7
   watchlist:
     - BTC/USDT
     - ETH/USDT
