@@ -84,6 +84,27 @@ func migrate(db *sql.DB) error {
 			volume REAL NOT NULL,
 			PRIMARY KEY (symbol, timeframe, timestamp)
 		)`,
+		`CREATE TABLE IF NOT EXISTS alerts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			type TEXT NOT NULL,
+			symbol TEXT,
+			condition TEXT NOT NULL,
+			threshold REAL,
+			expression TEXT,
+			message TEXT,
+			enabled BOOLEAN DEFAULT 1,
+			one_shot BOOLEAN DEFAULT 0,
+			last_triggered_at DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS alert_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			alert_id INTEGER NOT NULL,
+			event_type TEXT NOT NULL,
+			value REAL,
+			message TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, m := range migrations {
