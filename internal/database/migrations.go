@@ -73,6 +73,17 @@ func migrate(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)`,
 		`CREATE INDEX IF NOT EXISTS idx_graph_from ON knowledge_graph(entity_from)`,
 		`CREATE INDEX IF NOT EXISTS idx_graph_to ON knowledge_graph(entity_to)`,
+		`CREATE TABLE IF NOT EXISTS candle_cache (
+			symbol TEXT NOT NULL,
+			timeframe TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			open REAL NOT NULL,
+			high REAL NOT NULL,
+			low REAL NOT NULL,
+			close REAL NOT NULL,
+			volume REAL NOT NULL,
+			PRIMARY KEY (symbol, timeframe, timestamp)
+		)`,
 	}
 
 	for _, m := range migrations {
