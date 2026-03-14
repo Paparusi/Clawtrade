@@ -60,15 +60,33 @@ type ExchangeEntry struct {
 	Fields  map[string]string `yaml:"fields"`
 }
 
+type SubAgentEntry struct {
+	Name         string `yaml:"name"`
+	Enabled      bool   `yaml:"enabled"`
+	ScanInterval int    `yaml:"scan_interval"`
+	Model        string `yaml:"model"`
+}
+
+type AnalysisConfig struct {
+	StrategiesDir    string             `yaml:"strategies_dir"`
+	ActiveStrategies []string           `yaml:"active_strategies"`
+	Weights          map[string]float64 `yaml:"weights"`
+	MinConfluence    int                `yaml:"min_confluence"`
+	Timeframes       []string           `yaml:"timeframes"`
+	ExpertModel      string             `yaml:"expert_model"`
+	SynthesisModel   string             `yaml:"synthesis_model"`
+}
+
 type AgentConfig struct {
-	Enabled       bool        `yaml:"enabled"`
-	AutoTrade     bool        `yaml:"auto_trade"`
-	Confirmation  bool        `yaml:"confirmation"`
-	MinConfidence float64     `yaml:"min_confidence"`
-	ScanInterval  int         `yaml:"scan_interval"`
-	Watchlist     []string    `yaml:"watchlist"`
-	SubAgents     []string    `yaml:"sub_agents"`
-	Model         ModelConfig `yaml:"model"`
+	Enabled       bool             `yaml:"enabled"`
+	AutoTrade     bool             `yaml:"auto_trade"`
+	Confirmation  bool             `yaml:"confirmation"`
+	MinConfidence float64          `yaml:"min_confidence"`
+	ScanInterval  int              `yaml:"scan_interval"`
+	Watchlist     []string         `yaml:"watchlist"`
+	SubAgents     []SubAgentEntry  `yaml:"sub_agents"`
+	Model         ModelConfig      `yaml:"model"`
+	Analysis      AnalysisConfig   `yaml:"analysis"`
 }
 
 type ModelConfig struct {
@@ -156,11 +174,24 @@ func defaultConfig() *Config {
 			Enabled: true, AutoTrade: false, Confirmation: true,
 			MinConfidence: 0.7, ScanInterval: 30,
 			Watchlist: []string{"BTC/USDT", "ETH/USDT"},
-			SubAgents: []string{"market-scanner", "risk-manager", "portfolio-optimizer", "news-analyst", "execution-engine"},
+			SubAgents: []SubAgentEntry{
+				{Name: "market-analyst", Enabled: true, ScanInterval: 300},
+				{Name: "devils-advocate", Enabled: true},
+				{Name: "narrative", Enabled: true, ScanInterval: 900},
+				{Name: "reflection", Enabled: true, ScanInterval: 300},
+				{Name: "correlation", Enabled: true, ScanInterval: 600},
+			},
 			Model: ModelConfig{
 				Primary:     "",
 				MaxTokens:   4096,
 				Temperature: 0.7,
+			},
+			Analysis: AnalysisConfig{
+				StrategiesDir:    "",
+				ActiveStrategies: []string{"price_action", "smc"},
+				Weights:          map[string]float64{"price_action": 0.5, "smc": 0.5},
+				MinConfluence:    2,
+				Timeframes:       []string{"15m", "1h", "4h"},
 			},
 		},
 		Notifications: NotificationsConfig{

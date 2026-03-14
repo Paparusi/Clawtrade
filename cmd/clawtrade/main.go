@@ -11,11 +11,13 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/clawtrade/clawtrade/internal"
 	"github.com/clawtrade/clawtrade/internal/adapter"
 	"github.com/clawtrade/clawtrade/internal/adapter/binance"
 	"github.com/clawtrade/clawtrade/internal/adapter/bybit"
+	"github.com/clawtrade/clawtrade/internal/agent"
 	"github.com/clawtrade/clawtrade/internal/api"
 	"github.com/clawtrade/clawtrade/internal/config"
 	"github.com/clawtrade/clawtrade/internal/database"
@@ -23,6 +25,7 @@ import (
 	"github.com/clawtrade/clawtrade/internal/memory"
 	"github.com/clawtrade/clawtrade/internal/risk"
 	"github.com/clawtrade/clawtrade/internal/security"
+	"github.com/clawtrade/clawtrade/internal/subagent"
 )
 
 var configPath = "config/default.yaml"
@@ -219,6 +222,127 @@ func serve() error {
 		MaxOrderSize:        10000,
 	})
 
+	// Initialize sub-agent system
+	subBus := subagent.NewEventBus()
+	agentMgr := subagent.NewAgentManager(subBus)
+	ctxBuilder := agent.NewContextBuilder(cfg, adapters, riskEngine, memStore)
+
+	// Resolve the default API key for sub-agent LLM calls
+	defaultAPIKey := cfg.Agent.Model.ResolveAPIKey()
+	defaultModel := cfg.Agent.Model.Primary
+
+	// Load strategies from directory or use built-in defaults
+	var strategies []subagent.Strategy
+	if cfg.Agent.Analysis.StrategiesDir != "" {
+		loaded, err := subagent.LoadStrategies(cfg.Agent.Analysis.StrategiesDir)
+		if err != nil {
+			fmt.Printf("Warning: could not load strategies from %s: %v\n", cfg.Agent.Analysis.StrategiesDir, err)
+		} else {
+			strategies = loaded
+			fmt.Printf("Strategies: loaded %d from %s\n", len(strategies), cfg.Agent.Analysis.StrategiesDir)
+		}
+	}
+
+	// Create and register each enabled sub-agent
+	for _, entry := range cfg.Agent.SubAgents {
+		if !entry.Enabled {
+			continue
+		}
+
+		// Determine the model string for this sub-agent
+		modelStr := defaultModel
+		if entry.Model != "" {
+			modelStr = entry.Model
+		}
+
+		if modelStr == "" {
+			// No model configured; sub-agents that need LLM will run without it
+			fmt.Printf("Sub-agent %s: no model configured, LLM calls will be skipped\n", entry.Name)
+		}
+
+		// Build an LLMCaller (may have empty model, sub-agents handle nil callers gracefully)
+		var caller *subagent.LLMCaller
+		if modelStr != "" {
+			caller = subagent.NewLLMCaller(modelStr, defaultAPIKey, cfg.Agent.Model.MaxTokens)
+		}
+
+		scanInterval := time.Duration(entry.ScanInterval) * time.Second
+
+		switch entry.Name {
+		case "market-analyst":
+			// Determine expert/synthesis models
+			expertModel := cfg.Agent.Analysis.ExpertModel
+			if expertModel == "" {
+				expertModel = modelStr
+			}
+			synthesisModel := cfg.Agent.Analysis.SynthesisModel
+			if synthesisModel == "" {
+				synthesisModel = modelStr
+			}
+
+			var expertCaller, synthesisCaller *subagent.LLMCaller
+			if expertModel != "" {
+				expertCaller = subagent.NewLLMCaller(expertModel, defaultAPIKey, cfg.Agent.Model.MaxTokens)
+			}
+			if synthesisModel != "" {
+				synthesisCaller = subagent.NewLLMCaller(synthesisModel, defaultAPIKey, cfg.Agent.Model.MaxTokens)
+			}
+
+			ma := subagent.NewMarketAnalyst(subagent.MarketAnalystConfig{
+				Strategies:       strategies,
+				ActiveStrategies: cfg.Agent.Analysis.ActiveStrategies,
+				Weights:          cfg.Agent.Analysis.Weights,
+				ScanInterval:     scanInterval,
+				Timeframes:       cfg.Agent.Analysis.Timeframes,
+				ExpertCaller:     expertCaller,
+				SynthesisCaller:  synthesisCaller,
+				MinConfluence:    cfg.Agent.Analysis.MinConfluence,
+				Adapters:         adapters,
+				Bus:              subBus,
+				Watchlist:        cfg.Agent.Watchlist,
+			})
+			agentMgr.Register(ma)
+
+		case "devils-advocate":
+			da := subagent.NewDevilsAdvocate(subagent.DevilsAdvocateConfig{
+				LLM: caller,
+				Bus: subBus,
+			})
+			agentMgr.Register(da)
+
+		case "narrative":
+			na := subagent.NewNarrativeAgent(subagent.NarrativeConfig{
+				LLM:          caller,
+				Bus:          subBus,
+				Adapters:     adapters,
+				Watchlist:    cfg.Agent.Watchlist,
+				ScanInterval: scanInterval,
+			})
+			agentMgr.Register(na)
+
+		case "reflection":
+			ra := subagent.NewReflectionAgent(subagent.ReflectionConfig{
+				LLM:          caller,
+				Bus:          subBus,
+				ScanInterval: scanInterval,
+			})
+			agentMgr.Register(ra)
+
+		case "correlation":
+			ca := subagent.NewCorrelationAgent(subagent.CorrelationConfig{
+				LLM:          caller,
+				Bus:          subBus,
+				Adapters:     adapters,
+				Watchlist:    cfg.Agent.Watchlist,
+				ScanInterval: scanInterval,
+			})
+			agentMgr.Register(ca)
+
+		default:
+			fmt.Printf("Warning: unknown sub-agent %q, skipping\n", entry.Name)
+		}
+	}
+
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	srv := api.NewServer(cfg, bus, memStore, auditLog, adapters, riskEngine)
 
@@ -233,6 +357,38 @@ func serve() error {
 		fmt.Println("\nShutting down...")
 		cancel()
 	}()
+
+	// Start sub-agent manager
+	agentMgr.StartAll(ctx)
+	defer agentMgr.StopAll()
+
+	// Listen for sub-agent events and feed insights into the context builder
+	eventTypes := []string{"analysis", "counter_analysis", "narrative", "reflection", "correlation"}
+	for _, et := range eventTypes {
+		ch := subBus.Subscribe(et)
+		go func(eventType string, c <-chan subagent.Event) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case ev := <-c:
+					// Extract the primary insight text from the event
+					insight := extractInsight(ev)
+					if insight != "" {
+						ctxBuilder.SetSubAgentInsight(eventType, insight)
+					}
+				}
+			}
+		}(et, ch)
+	}
+
+	// Log sub-agent statuses
+	statuses := agentMgr.Statuses()
+	if len(statuses) > 0 {
+		fmt.Printf("Sub-agents: %d registered\n", len(statuses))
+	}
+
+	_ = ctxBuilder // ctxBuilder will be used by chat engine in future
 
 	fmt.Printf("Clawtrade %s starting...\n", internal.Version)
 	fmt.Printf("API server: http://%s\n", addr)
@@ -272,6 +428,18 @@ func serve() error {
 
 	fmt.Println("Goodbye!")
 	return nil
+}
+
+// extractInsight pulls the most relevant text from a sub-agent event for
+// inclusion in the system prompt context.
+func extractInsight(ev subagent.Event) string {
+	// Try common data keys in priority order
+	for _, key := range []string{"synthesis", "analysis", "counter", "llm_analysis", "formatted"} {
+		if v, ok := ev.Data[key].(string); ok && v != "" {
+			return fmt.Sprintf("[%s] %s", ev.Source, v)
+		}
+	}
+	return ""
 }
 
 // ─── init (comprehensive setup wizard) ───────────────────────────────
@@ -1228,7 +1396,11 @@ func agentShow() error {
 
 	fmt.Println("  Sub-Agents:")
 	for _, sa := range a.SubAgents {
-		fmt.Printf("    • %s\n", sa)
+		status := "disabled"
+		if sa.Enabled {
+			status = "enabled"
+		}
+		fmt.Printf("    • %s (%s)\n", sa.Name, status)
 	}
 	fmt.Println()
 

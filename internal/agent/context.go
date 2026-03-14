@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/clawtrade/clawtrade/internal/adapter"
@@ -15,20 +16,31 @@ import (
 
 // ContextBuilder gathers real-time data and builds the system prompt.
 type ContextBuilder struct {
-	cfg        *config.Config
-	adapters   map[string]adapter.TradingAdapter
-	riskEngine *risk.Engine
-	memory     *memory.Store
+	cfg              *config.Config
+	adapters         map[string]adapter.TradingAdapter
+	riskEngine       *risk.Engine
+	memory           *memory.Store
+	subAgentInsights map[string]string // eventType -> latest insight text
+	insightsMu       sync.RWMutex
 }
 
 // NewContextBuilder creates a context builder with access to all data sources.
 func NewContextBuilder(cfg *config.Config, adapters map[string]adapter.TradingAdapter, riskEngine *risk.Engine, mem *memory.Store) *ContextBuilder {
 	return &ContextBuilder{
-		cfg:        cfg,
-		adapters:   adapters,
-		riskEngine: riskEngine,
-		memory:     mem,
+		cfg:              cfg,
+		adapters:         adapters,
+		riskEngine:       riskEngine,
+		memory:           mem,
+		subAgentInsights: make(map[string]string),
 	}
+}
+
+// SetSubAgentInsight stores or updates a sub-agent insight keyed by event type.
+// These insights are included in the system prompt built by BuildSystemPrompt.
+func (cb *ContextBuilder) SetSubAgentInsight(eventType, insight string) {
+	cb.insightsMu.Lock()
+	defer cb.insightsMu.Unlock()
+	cb.subAgentInsights[eventType] = insight
 }
 
 // BuildSystemPrompt creates a rich system prompt with real-time trading context.
@@ -102,6 +114,16 @@ func (cb *ContextBuilder) BuildSystemPrompt(ctx context.Context) string {
 
 	// Add learned rules from memory
 	cb.addMemoryContext(&b)
+
+	// Add sub-agent insights
+	cb.insightsMu.RLock()
+	if len(cb.subAgentInsights) > 0 {
+		b.WriteString("## AI Sub-Agent Insights\n")
+		for eventType, insight := range cb.subAgentInsights {
+			b.WriteString(fmt.Sprintf("### %s\n%s\n\n", eventType, insight))
+		}
+	}
+	cb.insightsMu.RUnlock()
 
 	b.WriteString(fmt.Sprintf("## Current Time\n%s UTC\n", time.Now().UTC().Format("2006-01-02 15:04:05")))
 
