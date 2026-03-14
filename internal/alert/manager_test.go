@@ -160,6 +160,71 @@ func TestManager_OneShot(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestManager_CustomExpressionAlert(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+
+	// Create candle_cache table for expression evaluation
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS candle_cache (
+		symbol TEXT NOT NULL,
+		timeframe TEXT NOT NULL,
+		timestamp INTEGER NOT NULL,
+		open REAL NOT NULL,
+		high REAL NOT NULL,
+		low REAL NOT NULL,
+		close REAL NOT NULL,
+		volume REAL NOT NULL,
+		PRIMARY KEY (symbol, timeframe, timestamp)
+	)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert 50 candles (downtrend for RSI < 30)
+	now := time.Now().Unix()
+	for i := 0; i < 50; i++ {
+		price := 100.0 - float64(i)*1.5
+		ts := now - int64((50-i)*3600)
+		db.Exec(`INSERT INTO candle_cache (symbol, timeframe, timestamp, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			"BTC/USDT", "1h", ts, price+1, price+2, price-1, price, 1000)
+	}
+
+	store := NewStore(db)
+	bus := engine.NewEventBus()
+
+	mgr := NewManager(store, bus, db, ManagerConfig{RateLimitMinutes: 0})
+
+	store.Create(&Alert{
+		Type:       AlertTypeCustom,
+		Symbol:     "BTC/USDT",
+		Condition:  CondExpression,
+		Expression: "close < 30",
+		Message:    "Custom rule triggered",
+		Enabled:    true,
+	})
+	mgr.LoadAlerts()
+
+	var triggered []string
+	var mu sync.Mutex
+	mgr.OnTrigger(func(a Alert, msg string) {
+		mu.Lock()
+		triggered = append(triggered, msg)
+		mu.Unlock()
+	})
+
+	mgr.Evaluate(engine.Event{
+		Type: "price.update",
+		Data: map[string]any{"symbol": "BTC/USDT", "last": 25.0},
+	})
+	time.Sleep(10 * time.Millisecond)
+
+	mu.Lock()
+	if len(triggered) != 1 {
+		t.Fatalf("expected 1 custom trigger, got %d", len(triggered))
+	}
+	mu.Unlock()
+}
+
 func TestManager_PnLAlert(t *testing.T) {
 	db := testDB(t)
 	defer db.Close()

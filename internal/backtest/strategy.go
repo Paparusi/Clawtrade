@@ -265,6 +265,18 @@ func resolveValue(s string, vals map[string]float64) float64 {
 // Mode 3: Built-in strategies
 // ---------------------------------------------------------------------------
 
+// EvalExprPublic evaluates an expression string against indicator values.
+// Exported for use by the alerting system.
+func EvalExprPublic(expr string, indicators map[string]float64) bool {
+	return evalExpr(expr, indicators)
+}
+
+// ComputeIndicatorsPublic computes technical indicators from candles.
+// Exported for use by the alerting system.
+func ComputeIndicatorsPublic(candles []adapter.Candle) map[string]float64 {
+	return buildIndicatorMap(toAnalysisCandles(candles))
+}
+
 // GetBuiltinStrategy returns a pre-configured ConfigStrategy for well-known
 // strategy names.
 func GetBuiltinStrategy(name string) StrategyRunner {

@@ -1,10 +1,13 @@
 package alert
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/clawtrade/clawtrade/internal/adapter"
+	"github.com/clawtrade/clawtrade/internal/backtest"
 	"github.com/clawtrade/clawtrade/internal/engine"
 )
 
@@ -21,6 +24,7 @@ type Manager struct {
 	mu          sync.RWMutex
 	store       *Store
 	bus         *engine.EventBus
+	db          *sql.DB
 	alerts      []Alert
 	handlers    []TriggerHandler
 	config      ManagerConfig
@@ -28,10 +32,11 @@ type Manager struct {
 }
 
 // NewManager creates a new AlertManager.
-func NewManager(store *Store, bus *engine.EventBus, db interface{}, cfg ManagerConfig) *Manager {
+func NewManager(store *Store, bus *engine.EventBus, db *sql.DB, cfg ManagerConfig) *Manager {
 	return &Manager{
 		store:       store,
 		bus:         bus,
+		db:          db,
 		config:      cfg,
 		lastTrigger: make(map[int64]time.Time),
 	}
@@ -178,8 +183,93 @@ func (m *Manager) checkEventTypeMatch(a Alert, e engine.Event, prefix string) (b
 }
 
 func (m *Manager) checkCustomAlert(a Alert, e engine.Event) (bool, string) {
-	// Custom expression alerts will be implemented in Task 3
+	if e.Type != "price.update" {
+		return false, ""
+	}
+	symbol, _ := e.Data["symbol"].(string)
+	if a.Symbol != "" && symbol != a.Symbol {
+		return false, ""
+	}
+	if a.Expression == "" {
+		return false, ""
+	}
+	if m.db == nil {
+		// No DB — use price-only evaluation
+		price, ok := e.Data["last"].(float64)
+		if !ok {
+			return false, ""
+		}
+		indicators := map[string]float64{"close": price}
+		if backtest.EvalExprPublic(a.Expression, indicators) {
+			msg := a.Message
+			if msg == "" {
+				msg = fmt.Sprintf("Custom alert: %s (%s = %.2f)", a.Expression, symbol, price)
+			}
+			return true, msg
+		}
+		return false, ""
+	}
+
+	// Load recent candles from cache for indicator computation
+	candles := m.loadCachedCandles(symbol, "1h", 200)
+	if len(candles) < 26 {
+		// Not enough data — use price-only
+		price, ok := e.Data["last"].(float64)
+		if !ok {
+			return false, ""
+		}
+		indicators := map[string]float64{"close": price}
+		if backtest.EvalExprPublic(a.Expression, indicators) {
+			msg := a.Message
+			if msg == "" {
+				msg = fmt.Sprintf("Custom alert: %s (%s = %.2f)", a.Expression, symbol, price)
+			}
+			return true, msg
+		}
+		return false, ""
+	}
+
+	indicators := backtest.ComputeIndicatorsPublic(candles)
+	if price, ok := e.Data["last"].(float64); ok {
+		indicators["close"] = price
+	}
+
+	if backtest.EvalExprPublic(a.Expression, indicators) {
+		msg := a.Message
+		if msg == "" {
+			msg = fmt.Sprintf("Custom alert: %s triggered for %s", a.Expression, symbol)
+		}
+		return true, msg
+	}
 	return false, ""
+}
+
+func (m *Manager) loadCachedCandles(symbol, timeframe string, limit int) []adapter.Candle {
+	rows, err := m.db.Query(
+		`SELECT timestamp, open, high, low, close, volume FROM candle_cache WHERE symbol = ? AND timeframe = ? ORDER BY timestamp DESC LIMIT ?`,
+		symbol, timeframe, limit,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var candles []adapter.Candle
+	for rows.Next() {
+		var ts int64
+		var c adapter.Candle
+		if err := rows.Scan(&ts, &c.Open, &c.High, &c.Low, &c.Close, &c.Volume); err != nil {
+			continue
+		}
+		c.Timestamp = time.Unix(ts, 0)
+		candles = append(candles, c)
+	}
+
+	// Reverse to chronological order
+	for i, j := 0, len(candles)-1; i < j; i, j = i+1, j-1 {
+		candles[i], candles[j] = candles[j], candles[i]
+	}
+	return candles
 }
 
 func (m *Manager) fireAlert(a Alert, msg string, e engine.Event) {
