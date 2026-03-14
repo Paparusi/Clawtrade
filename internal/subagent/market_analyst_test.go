@@ -121,7 +121,7 @@ func TestMarketAnalyst_StartStop(t *testing.T) {
 	}
 }
 
-// mockAdapter implements adapter.TradingAdapter for testing
+// mockAdapter implements adapter.TradingAdapter for testing.
 type mockAdapter struct {
 	connected bool
 	mu        sync.Mutex
