@@ -15,6 +15,7 @@ import (
 	"github.com/clawtrade/clawtrade/internal"
 	"github.com/clawtrade/clawtrade/internal/adapter"
 	"github.com/clawtrade/clawtrade/internal/adapter/binance"
+	"github.com/clawtrade/clawtrade/internal/adapter/bybit"
 	"github.com/clawtrade/clawtrade/internal/api"
 	"github.com/clawtrade/clawtrade/internal/config"
 	"github.com/clawtrade/clawtrade/internal/database"
@@ -196,6 +197,15 @@ func serve() error {
 			}
 			adapters["binance"] = ba
 			fmt.Printf("Exchange: binance loaded\n")
+		case "bybit":
+			apiKey := ex.Fields["api_key"]
+			apiSecret := ex.Fields["api_secret"]
+			ba := bybit.New(apiKey, apiSecret)
+			if ex.Fields["environment"] == "testnet" {
+				ba.SetTestnet(true)
+			}
+			adapters["bybit"] = ba
+			fmt.Printf("Exchange: bybit loaded\n")
 		}
 	}
 
