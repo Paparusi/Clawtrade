@@ -1,13 +1,48 @@
-const exchanges = [
-  { name: 'Binance', type: 'CEX', status: 'connected' as const, pairs: 342 },
-  { name: 'Bybit', type: 'CEX', status: 'connected' as const, pairs: 286 },
-  { name: 'MetaTrader 5', type: 'Broker', status: 'connected' as const, pairs: 78 },
-  { name: 'Interactive Brokers', type: 'Broker', status: 'ready' as const, pairs: 1200 },
-  { name: 'Hyperliquid', type: 'DEX', status: 'connected' as const, pairs: 45 },
-  { name: 'Uniswap', type: 'DEX', status: 'ready' as const, pairs: 500 },
+import { useState, useEffect } from 'react'
+import { fetchExchanges, type ExchangeInfo } from '../api/client'
+
+interface Exchange {
+  name: string
+  type: string
+  status: 'connected' | 'ready'
+  pairs: number
+}
+
+const FALLBACK: Exchange[] = [
+  { name: 'Binance', type: 'CEX', status: 'connected', pairs: 342 },
+  { name: 'Bybit', type: 'CEX', status: 'connected', pairs: 286 },
+  { name: 'MetaTrader 5', type: 'Broker', status: 'connected', pairs: 78 },
+  { name: 'Interactive Brokers', type: 'Broker', status: 'ready', pairs: 1200 },
+  { name: 'Hyperliquid', type: 'DEX', status: 'connected', pairs: 45 },
+  { name: 'Uniswap', type: 'DEX', status: 'ready', pairs: 500 },
 ]
 
+function apiToExchange(info: ExchangeInfo): Exchange {
+  return {
+    name: info.name.charAt(0).toUpperCase() + info.name.slice(1),
+    type: info.caps?.futures ? 'CEX' : 'Exchange',
+    status: info.connected ? 'connected' : 'ready',
+    pairs: 0,
+  }
+}
+
 export default function ExchangeStatus() {
+  const [exchanges, setExchanges] = useState<Exchange[]>(FALLBACK)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchExchanges()
+      .then(data => {
+        if (cancelled || !data.length) return
+        const live = data.map(apiToExchange)
+        const fallbackNames = new Set(live.map(e => e.name.toLowerCase()))
+        const remaining = FALLBACK.filter(f => !fallbackNames.has(f.name.toLowerCase()))
+        setExchanges([...live, ...remaining])
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   const on = exchanges.filter(e => e.status === 'connected').length
   return (
     <div className="card fade-in" style={{ animationDelay: '250ms' }}>
@@ -35,7 +70,7 @@ export default function ExchangeStatus() {
             }} />
             <div>
               <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-1)' }}>{ex.name}</div>
-              <div style={{ fontSize: 9, color: 'var(--text-3)' }}>{ex.type} · {ex.pairs} pairs</div>
+              <div style={{ fontSize: 9, color: 'var(--text-3)' }}>{ex.type}{ex.pairs > 0 ? ` · ${ex.pairs} pairs` : ''}</div>
             </div>
           </div>
         ))}

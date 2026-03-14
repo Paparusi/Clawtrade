@@ -1,21 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { fetchPrice, type PriceData } from '../api/client'
 
 type AC = 'all' | 'crypto' | 'forex' | 'stocks' | 'index'
 
-const markets = [
-  { sym: 'BTC/USDT', price: 70245, change: 2.34, exchange: 'Binance', class: 'crypto' as AC },
-  { sym: 'ETH/USDT', price: 3382, change: -1.12, exchange: 'Binance', class: 'crypto' as AC },
-  { sym: 'SOL/USDT', price: 172.3, change: 5.67, exchange: 'Bybit', class: 'crypto' as AC },
-  { sym: 'BNB/USDT', price: 612.4, change: 0.89, exchange: 'Binance', class: 'crypto' as AC },
-  { sym: 'EUR/USD', price: 1.0847, change: -0.12, exchange: 'MT5', class: 'forex' as AC },
-  { sym: 'GBP/JPY', price: 196.42, change: 0.34, exchange: 'MT5', class: 'forex' as AC },
-  { sym: 'XAU/USD', price: 2345, change: 0.89, exchange: 'MT5', class: 'forex' as AC },
-  { sym: 'AAPL', price: 198.52, change: 1.05, exchange: 'IBKR', class: 'stocks' as AC },
-  { sym: 'NVDA', price: 875.3, change: 3.42, exchange: 'IBKR', class: 'stocks' as AC },
-  { sym: 'TSLA', price: 245.6, change: -2.15, exchange: 'IBKR', class: 'stocks' as AC },
-  { sym: 'NQ100', price: 18420, change: 0.67, exchange: 'CME', class: 'index' as AC },
-  { sym: 'SPX', price: 5234, change: 0.42, exchange: 'CME', class: 'index' as AC },
-  { sym: 'VIX', price: 14.8, change: -5.12, exchange: 'CME', class: 'index' as AC },
+interface MarketItem {
+  sym: string
+  price: number
+  change: number
+  exchange: string
+  class: AC
+}
+
+const SYMBOLS: { sym: string; exchange: string; class: AC }[] = [
+  { sym: 'BTC/USDT', exchange: 'Binance', class: 'crypto' },
+  { sym: 'ETH/USDT', exchange: 'Binance', class: 'crypto' },
+  { sym: 'SOL/USDT', exchange: 'Binance', class: 'crypto' },
+  { sym: 'BNB/USDT', exchange: 'Binance', class: 'crypto' },
+  { sym: 'EUR/USD', exchange: 'MT5', class: 'forex' },
+  { sym: 'GBP/JPY', exchange: 'MT5', class: 'forex' },
+  { sym: 'XAU/USD', exchange: 'MT5', class: 'forex' },
+  { sym: 'AAPL', exchange: 'IBKR', class: 'stocks' },
+  { sym: 'NVDA', exchange: 'IBKR', class: 'stocks' },
+  { sym: 'TSLA', exchange: 'IBKR', class: 'stocks' },
+  { sym: 'NQ100', exchange: 'CME', class: 'index' },
+  { sym: 'SPX', exchange: 'CME', class: 'index' },
+  { sym: 'VIX', exchange: 'CME', class: 'index' },
+]
+
+const FALLBACK: MarketItem[] = [
+  { sym: 'BTC/USDT', price: 70245, change: 2.34, exchange: 'Binance', class: 'crypto' },
+  { sym: 'ETH/USDT', price: 3382, change: -1.12, exchange: 'Binance', class: 'crypto' },
+  { sym: 'SOL/USDT', price: 172.3, change: 5.67, exchange: 'Bybit', class: 'crypto' },
+  { sym: 'BNB/USDT', price: 612.4, change: 0.89, exchange: 'Binance', class: 'crypto' },
+  { sym: 'EUR/USD', price: 1.0847, change: -0.12, exchange: 'MT5', class: 'forex' },
+  { sym: 'GBP/JPY', price: 196.42, change: 0.34, exchange: 'MT5', class: 'forex' },
+  { sym: 'XAU/USD', price: 2345, change: 0.89, exchange: 'MT5', class: 'forex' },
+  { sym: 'AAPL', price: 198.52, change: 1.05, exchange: 'IBKR', class: 'stocks' },
+  { sym: 'NVDA', price: 875.3, change: 3.42, exchange: 'IBKR', class: 'stocks' },
+  { sym: 'TSLA', price: 245.6, change: -2.15, exchange: 'IBKR', class: 'stocks' },
+  { sym: 'NQ100', price: 18420, change: 0.67, exchange: 'CME', class: 'index' },
+  { sym: 'SPX', price: 5234, change: 0.42, exchange: 'CME', class: 'index' },
+  { sym: 'VIX', price: 14.8, change: -5.12, exchange: 'CME', class: 'index' },
 ]
 
 const tabs: { id: AC; label: string }[] = [
@@ -35,12 +60,45 @@ function fmt(p: number, s: string) {
 
 export default function MarketOverview() {
   const [tab, setTab] = useState<AC>('all')
+  const [markets, setMarkets] = useState<MarketItem[]>(FALLBACK)
+  const [isLive, setIsLive] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const cryptoSymbols = SYMBOLS.filter(s => s.class === 'crypto')
+    Promise.allSettled(
+      cryptoSymbols.map(s => fetchPrice(s.sym, 'binance'))
+    ).then(results => {
+      if (cancelled) return
+      const updated = [...FALLBACK]
+      let anyLive = false
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+          const p = r.value as PriceData
+          const idx = updated.findIndex(m => m.sym === cryptoSymbols[i].sym)
+          if (idx >= 0) {
+            const prevPrice = updated[idx].price
+            const change = prevPrice > 0 ? ((p.last - prevPrice) / prevPrice * 100) : 0
+            updated[idx] = { ...updated[idx], price: p.last, change: +change.toFixed(2) }
+            anyLive = true
+          }
+        }
+      })
+      setMarkets(updated)
+      if (anyLive) setIsLive(true)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const filtered = tab === 'all' ? markets : markets.filter(m => m.class === tab)
 
   return (
     <div className="card fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, animationDelay: '200ms' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Markets</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Markets</span>
+          {isLive && <span style={{ fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: 3, color: '#10b981', background: 'rgba(16,185,129,0.1)' }}>LIVE</span>}
+        </div>
         <div style={{ display: 'flex', gap: 2 }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{

@@ -1,6 +1,9 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { fetchCandles, type CandleData } from '../api/client'
 
 const TF = ['1H', '4H', '1D', '1W'] as const
+const TF_MAP: Record<string, string> = { '1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w' }
+const TF_LIMITS: Record<string, number> = { '1H': 60, '4H': 48, '1D': 45, '1W': 32 }
 
 interface Candle { o: number; h: number; l: number; c: number; v: number; t: number }
 
@@ -18,11 +21,15 @@ function genCandles(count: number, base: number, vol: number, ms: number): Candl
   return arr
 }
 
-const DATA: Record<string, Candle[]> = {
+const FALLBACK: Record<string, Candle[]> = {
   '1H': genCandles(60, 69800, 150, 3600000),
   '4H': genCandles(48, 68500, 450, 14400000),
   '1D': genCandles(45, 65000, 1200, 86400000),
   '1W': genCandles(32, 55000, 3500, 604800000),
+}
+
+function apiToCandle(c: CandleData): Candle {
+  return { o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume, t: new Date(c.timestamp).getTime() }
 }
 
 function fmtTime(ts: number, tf: string) {
@@ -34,8 +41,23 @@ function fmtTime(ts: number, tf: string) {
 export default function PriceChart() {
   const [tf, setTf] = useState<typeof TF[number]>('1D')
   const [hov, setHov] = useState<{ idx: number; x: number; y: number } | null>(null)
+  const [liveData, setLiveData] = useState<Record<string, Candle[]>>({})
+  const [isLive, setIsLive] = useState(false)
   const ref = useRef<SVGSVGElement>(null)
-  const candles = DATA[tf]
+
+  useEffect(() => {
+    let cancelled = false
+    fetchCandles('BTC/USDT', TF_MAP[tf], TF_LIMITS[tf])
+      .then(data => {
+        if (cancelled || !data.length) return
+        setLiveData(prev => ({ ...prev, [tf]: data.map(apiToCandle) }))
+        setIsLive(true)
+      })
+      .catch(() => setIsLive(false))
+    return () => { cancelled = true }
+  }, [tf])
+
+  const candles = liveData[tf] || FALLBACK[tf]
 
   const last = candles[candles.length - 1]
   const first = candles[0]
@@ -97,6 +119,11 @@ export default function PriceChart() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>BTC/USDT</span>
             <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 5px', borderRadius: 4, color: 'var(--text-3)', background: 'var(--bg-2)' }}>PERP</span>
+            <span style={{
+              fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+              color: isLive ? '#10b981' : '#f59e0b',
+              background: isLive ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+            }}>{isLive ? 'LIVE' : 'DEMO'}</span>
           </div>
           <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
           <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: up ? '#10b981' : '#ef4444' }}>{up ? '+' : ''}{pct}%</span>

@@ -49,10 +49,13 @@ Open **http://localhost:8899** for the web dashboard.
 - Scenario analysis and stress testing
 
 ### Web Dashboard
+- **Live data** — All widgets connect to real exchange APIs with graceful fallback to demo mode
 - Real-time portfolio overview with P&L tracking
-- Candlestick charts with technical indicators
-- Positions table across all exchanges
-- Agent status and chat interface
+- Candlestick charts with EMA overlay (LIVE/DEMO indicator)
+- Market overview with live crypto prices from connected exchanges
+- Positions table across all exchanges with real-time P&L
+- Exchange status showing connected/ready state
+- Agent status and chat interface (real LLM integration)
 - Full settings panel (exchanges, risk, agent, notifications)
 
 ### Notifications

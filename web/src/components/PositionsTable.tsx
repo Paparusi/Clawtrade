@@ -1,4 +1,20 @@
-const positions = [
+import { useState, useEffect } from 'react'
+import { fetchPositions, type PositionData } from '../api/client'
+
+interface Position {
+  symbol: string
+  exchange: string
+  type: string
+  side: string
+  size: string
+  entry: number
+  mark: number
+  pnl: number
+  pnlPct: number
+  lev: string
+}
+
+const FALLBACK: Position[] = [
   { symbol: 'BTC/USDT', exchange: 'Binance', type: 'Crypto', side: 'Long', size: '0.05 BTC', entry: 68500, mark: 70200, pnl: 85, pnlPct: 2.48, lev: '10x' },
   { symbol: 'EUR/USD', exchange: 'MT5', type: 'Forex', side: 'Short', size: '0.5 lot', entry: 1.0892, mark: 1.0847, pnl: 225, pnlPct: 0.41, lev: '100x' },
   { symbol: 'ETH/USDT', exchange: 'Bybit', type: 'Crypto', side: 'Long', size: '1.2 ETH', entry: 3450, mark: 3380, pnl: -84, pnlPct: -2.03, lev: '5x' },
@@ -7,7 +23,36 @@ const positions = [
   { symbol: 'XAU/USD', exchange: 'MT5', type: 'Forex', side: 'Long', size: '0.1 lot', entry: 2310, mark: 2345, pnl: 350, pnlPct: 1.52, lev: '50x' },
 ]
 
+function apiToPosition(p: PositionData): Position {
+  const pnlPct = p.entry_price > 0 ? ((p.current_price - p.entry_price) / p.entry_price * 100) : 0
+  return {
+    symbol: p.symbol,
+    exchange: p.exchange,
+    type: 'Crypto',
+    side: p.side === 'long' ? 'Long' : 'Short',
+    size: `${p.size}`,
+    entry: p.entry_price,
+    mark: p.current_price,
+    pnl: p.pnl,
+    pnlPct: +pnlPct.toFixed(2),
+    lev: '1x',
+  }
+}
+
 export default function PositionsTable() {
+  const [positions, setPositions] = useState<Position[]>(FALLBACK)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchPositions()
+      .then(data => {
+        if (cancelled || !data.length) return
+        setPositions(data.map(apiToPosition))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   const total = positions.reduce((s, p) => s + p.pnl, 0)
 
   return (
