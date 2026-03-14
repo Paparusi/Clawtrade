@@ -250,6 +250,17 @@ function BybitForm({ fields, onChange }: { fields: Record<string, string>; onCha
 function MT5Form({ fields, onChange }: { fields: Record<string, string>; onChange: (k: string, v: string) => void }) {
   return (
     <>
+      <div style={{
+        padding: '10px 14px', borderRadius: 8, marginBottom: 16,
+        background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)',
+      }}>
+        <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0, lineHeight: 1.6 }}>
+          <span style={{ fontWeight: 600, color: '#818cf8' }}>Prerequisites:</span>{' '}
+          Install <a href="https://www.metatrader5.com/en/download" target="_blank" rel="noreferrer" style={{ color: '#818cf8', textDecoration: 'underline' }}>MetaTrader 5</a> on your machine (Windows only), then run{' '}
+          <code style={{ background: 'var(--bg-0)', padding: '2px 6px', borderRadius: 4, fontSize: 10 }}>pip install MetaTrader5</code>.
+          Clawtrade will automatically launch and connect to MT5 — no need to open it manually.
+        </p>
+      </div>
       <FormRow>
         <div>
           <FormLabel>Login (Account Number)</FormLabel>
@@ -263,7 +274,7 @@ function MT5Form({ fields, onChange }: { fields: Record<string, string>; onChang
       <FormRow>
         <div>
           <FormLabel>Server</FormLabel>
-          <TextInput value={fields.server} onChange={v => onChange('server', v)} placeholder="e.g. Forex4you-Demo, XM.COM-REAL" />
+          <TextInput value={fields.server} onChange={v => onChange('server', v)} placeholder="e.g. Exness-MT5Trial7, XM.COM-REAL" />
           <FormHint>Broker server name — check your MT5 terminal or broker email</FormHint>
         </div>
         <div>
