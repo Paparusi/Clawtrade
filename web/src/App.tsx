@@ -4,10 +4,16 @@ import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import PositionsTable from './components/PositionsTable'
 import PortfolioSummary from './components/PortfolioSummary'
-import PriceChart from './components/PriceChart'
+import TradingViewChart from './components/TradingViewChart'
 import MarketOverview from './components/MarketOverview'
+// @ts-expect-error reserved for future use
 import ExchangeStatus from './components/ExchangeStatus'
+// @ts-expect-error reserved for future use
 import AgentStatus from './components/AgentStatus'
+import AgentInsights from './components/AgentInsights'
+import RecentTrades from './components/RecentTrades'
+import TradeToast from './components/TradeToast'
+import StatusBar from './components/StatusBar'
 import SettingsPanel from './components/SettingsPanel'
 import PerformanceChart from './components/PerformanceChart'
 import RiskAnalysis from './components/RiskAnalysis'
@@ -20,19 +26,20 @@ export default function App() {
   const [tab, setTab] = useState('dashboard')
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--bg-0)', color: 'var(--text-2)', overflow: 'hidden' }}>
+    <div className="flex h-screen w-screen bg-[var(--bg-0)] text-[var(--text-2)] overflow-hidden">
+      <TradeToast />
       <Sidebar activeTab={tab} onTabChange={setTab} />
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+      <div className="flex flex-col flex-1 min-w-0">
         <Header />
-        <main style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <main className="flex-1 overflow-auto p-3">
           {tab === 'dashboard' && <DashboardView />}
           {tab === 'chat' && (
-            <div style={{ height: 'calc(100vh - 68px)', maxWidth: 900, margin: '0 auto' }}>
+            <div className="h-[calc(100vh-68px)] max-w-[900px] mx-auto">
               <ChatPanel />
             </div>
           )}
           {tab === 'positions' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="flex flex-col gap-3">
               <PortfolioSummary />
               <PositionsTable />
             </div>
@@ -41,6 +48,7 @@ export default function App() {
           {tab === 'strategies' && <StrategiesPlaceholder />}
           {tab === 'settings' && <SettingsPanel />}
         </main>
+        <StatusBar />
       </div>
     </div>
   )
@@ -48,34 +56,34 @@ export default function App() {
 
 function DashboardView() {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 380px',
-      gridTemplateRows: 'auto minmax(0, 2fr) minmax(0, 3fr)',
-      gap: 12,
-      width: '100%',
-      height: 'calc(100vh - 88px)',
-      minHeight: 0,
-    }}>
-      {/* Row 1: Portfolio Stats - full width */}
-      <div style={{ gridColumn: '1 / -1' }}>
+    <div className="flex gap-3 h-[calc(100vh-100px)]">
+      {/* Main area */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* Portfolio stats */}
         <PortfolioSummary />
+
+        {/* TradingView chart */}
+        <div className="flex-1 min-h-0">
+          <TradingViewChart />
+        </div>
+
+        {/* Bottom row: Market + Trades */}
+        <div className="grid grid-cols-2 gap-3" style={{ height: '220px' }}>
+          <MarketOverview />
+          <RecentTrades />
+        </div>
       </div>
 
-      {/* Row 2 Left: Chart */}
-      <PriceChart />
+      {/* Right sidebar */}
+      <div className="w-[340px] flex flex-col gap-3 shrink-0">
+        {/* Chat */}
+        <div className="flex-1 min-h-0 card overflow-hidden">
+          <ChatPanel />
+        </div>
 
-      {/* Row 2 Right: Agent */}
-      <AgentStatus />
-
-      {/* Row 3 Left: Positions */}
-      <PositionsTable />
-
-      {/* Row 3 Right: Exchanges + Markets */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}>
-        <ExchangeStatus />
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <MarketOverview />
+        {/* Agent Insights */}
+        <div className="h-[280px] card overflow-hidden">
+          <AgentInsights />
         </div>
       </div>
     </div>
@@ -84,28 +92,22 @@ function DashboardView() {
 
 function AnalyticsView() {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gridTemplateRows: 'minmax(280px, 1fr) minmax(220px, auto) minmax(180px, auto)',
-      gap: 12,
-      width: '100%',
-      height: 'calc(100vh - 88px)',
-      minHeight: 0,
-    }}>
-      {/* Row 1: Performance Chart + Risk Analysis */}
+    <div
+      className="grid gap-3 w-full min-h-0"
+      style={{
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: 'minmax(280px, 1fr) minmax(220px, auto) minmax(180px, auto)',
+        height: 'calc(100vh - 100px)',
+      }}
+    >
       <PerformanceChart />
       <RiskAnalysis />
-
-      {/* Row 2: Asset Allocation + Monthly Returns + Top Movers */}
-      <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr', gap: 12, minHeight: 0 }}>
+      <div className="col-span-2 grid gap-3 min-h-0" style={{ gridTemplateColumns: '1fr 1.2fr 1fr' }}>
         <AssetAllocation />
         <MonthlyReturns />
         <TopMovers />
       </div>
-
-      {/* Row 3: Drawdown Chart - full width */}
-      <div style={{ gridColumn: '1 / -1', minHeight: 0 }}>
+      <div className="col-span-2 min-h-0">
         <DrawdownChart />
       </div>
     </div>
@@ -114,19 +116,15 @@ function AnalyticsView() {
 
 function StrategiesPlaceholder() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 120px)' }}>
-      <div className="card" style={{ textAlign: 'center', padding: 48, maxWidth: 440 }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 14, margin: '0 auto 20px',
-          background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+    <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 120px)' }}>
+      <div className="card text-center p-12 max-w-[440px]">
+        <div className="w-14 h-14 rounded-[14px] mx-auto mb-5 bg-[rgba(99,102,241,0.08)] border border-[rgba(99,102,241,0.15)] flex items-center justify-center">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
         </div>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', marginBottom: 8 }}>Strategy Arena</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>
+        <h2 className="text-lg font-bold text-[var(--text-1)] mb-2">Strategy Arena</h2>
+        <p className="text-[13px] text-[var(--text-3)] leading-relaxed">
           Create, backtest, and A/B test trading strategies across Crypto, Forex, Stocks and Indices.
         </p>
       </div>
