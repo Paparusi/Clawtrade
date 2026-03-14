@@ -84,6 +84,8 @@ func main() {
 		err = handleRisk(os.Args[2:])
 	case "agent":
 		err = handleAgent(os.Args[2:])
+	case "models":
+		err = handleModels(os.Args[2:])
 	case "telegram":
 		err = handleTelegram(os.Args[2:])
 	case "notify":
@@ -133,6 +135,12 @@ Agent:
   agent set K V          Set an agent parameter
   agent watchlist add S  Add symbol to watchlist
   agent watchlist rm S   Remove symbol from watchlist
+
+Models (LLM Provider):
+  models setup           Interactive LLM provider setup
+  models set P/M         Set model (e.g. anthropic/claude-sonnet-4-6)
+  models list            List available providers
+  models status          Show current model config
 
 Notifications:
   telegram setup         Setup Telegram bot (interactive)
@@ -213,7 +221,7 @@ func initSetup() error {
 	fmt.Println()
 
 	// 1. Initialize directories and database
-	fmt.Println("  [1/6] Initializing system...")
+	fmt.Println("  [1/7] Initializing system...")
 	fmt.Println("  ─────────────────────────────")
 
 	if err := os.MkdirAll("data", 0755); err != nil {
@@ -236,7 +244,7 @@ func initSetup() error {
 	cfg, _ := config.Load(configPath)
 
 	// 2. Server
-	fmt.Println("  [2/6] Server Configuration")
+	fmt.Println("  [2/7] Server Configuration")
 	fmt.Println("  ─────────────────────────────")
 	cfg.Server.Host = promptDefault("  Bind host", cfg.Server.Host)
 	portStr := promptDefault("  Bind port", fmt.Sprintf("%d", cfg.Server.Port))
@@ -244,7 +252,7 @@ func initSetup() error {
 	fmt.Println()
 
 	// 3. Trading mode & Risk
-	fmt.Println("  [3/6] Risk Management")
+	fmt.Println("  [3/7] Risk Management")
 	fmt.Println("  ─────────────────────────────")
 	fmt.Println("  Trading modes:")
 	fmt.Println("    1. paper  - Simulated trading (no real money)")
@@ -283,7 +291,7 @@ func initSetup() error {
 	fmt.Println()
 
 	// 4. Exchange setup
-	fmt.Println("  [4/6] Exchange Setup")
+	fmt.Println("  [4/7] Exchange Setup")
 	fmt.Println("  ─────────────────────────────")
 	if promptYN("  Add an exchange now?", true) {
 		for {
@@ -369,8 +377,86 @@ func initSetup() error {
 	}
 	fmt.Println()
 
-	// 5. Notifications (Telegram / Discord)
-	fmt.Println("  [5/6] Notifications")
+	// 5. LLM Provider
+	fmt.Println("  [5/7] AI Model Provider")
+	fmt.Println("  ─────────────────────────────")
+	fmt.Println("  Your AI agent needs an LLM to analyze markets and make decisions.")
+	fmt.Println()
+	fmt.Println("  Popular choices:")
+	fmt.Println("    1. anthropic     Anthropic Claude (recommended)")
+	fmt.Println("    2. openai        OpenAI GPT")
+	fmt.Println("    3. openrouter    OpenRouter (multi-model access)")
+	fmt.Println("    4. deepseek      DeepSeek")
+	fmt.Println("    5. google        Google Gemini")
+	fmt.Println("    6. ollama        Ollama (local, free)")
+	fmt.Println("    7. skip          Configure later")
+	fmt.Println()
+	providerChoice := promptDefault("  Select provider", "1")
+
+	skipModel := false
+	switch providerChoice {
+	case "7", "skip":
+		skipModel = true
+		fmt.Println("  Skipped. Setup later: clawtrade models setup")
+	default:
+		var selectedProvider *providerInfo
+		for i, p := range providers {
+			if providerChoice == fmt.Sprintf("%d", i+1) || strings.EqualFold(providerChoice, p.name) {
+				selectedProvider = &providers[i]
+				break
+			}
+		}
+
+		if selectedProvider == nil {
+			fmt.Printf("  ✗ Unknown provider: %s, skipping\n", providerChoice)
+			skipModel = true
+		} else {
+			fmt.Printf("\n  Setting up %s\n", selectedProvider.label)
+
+			if !selectedProvider.isLocal {
+				existingKey := os.Getenv(selectedProvider.envKey)
+				if existingKey != "" {
+					masked := existingKey[:8] + "..." + existingKey[len(existingKey)-4:]
+					fmt.Printf("  Found %s: %s\n", selectedProvider.envKey, masked)
+				} else {
+					apiKey := prompt("  API Key: ")
+					if apiKey != "" {
+						if err := storeInVault(cfg.Vault.Path, selectedProvider.name, map[string]string{"api_key": apiKey}); err != nil {
+							fmt.Printf("  ⚠ Vault: %v\n", err)
+						} else {
+							fmt.Println("  ✓ API key stored in vault")
+						}
+					} else {
+						fmt.Printf("  ⚠ No key provided. Set %s env var or run: clawtrade models setup\n", selectedProvider.envKey)
+					}
+				}
+			} else {
+				fmt.Printf("  Make sure %s is running at %s\n", selectedProvider.name, selectedProvider.baseURL)
+			}
+
+			// Pick default model
+			defaultModel := selectedProvider.models[0]
+			fmt.Printf("\n  Models: %s\n", strings.Join(selectedProvider.models, ", "))
+			modelPick := promptDefault("  Model", defaultModel)
+			// Check if it's a number
+			for i, m := range selectedProvider.models {
+				if modelPick == fmt.Sprintf("%d", i+1) {
+					modelPick = m
+					break
+				}
+			}
+			if !strings.Contains(modelPick, "/") {
+				modelPick = selectedProvider.name + "/" + modelPick
+			}
+			cfg.Agent.Model.Primary = modelPick
+			fmt.Printf("  ✓ Model: %s\n", modelPick)
+		}
+	}
+	_ = skipModel
+	fmt.Println()
+
+	// 6. Notifications (Telegram / Discord)
+	fmt.Println("  [6/7] Notifications")
 	fmt.Println("  ─────────────────────────────")
 	fmt.Println("  Get alerts on trades, risk events, and system status.")
 	fmt.Println()
@@ -438,8 +524,8 @@ func initSetup() error {
 	cfg.Notifications.Alerts.SystemAlert = promptYN("    System alerts?", true)
 	fmt.Println()
 
-	// 6. Agent config
-	fmt.Println("  [6/6] AI Agent")
+	// 7. Agent config
+	fmt.Println("  [7/7] AI Agent")
 	fmt.Println("  ─────────────────────────────")
 	cfg.Agent.Enabled = promptYN("  Enable AI agent?", true)
 
@@ -496,6 +582,11 @@ func initSetup() error {
 	}
 	fmt.Printf("  Notifications: %d channels\n", notifyCount)
 	fmt.Printf("  Agent:        %v\n", cfg.Agent.Enabled)
+	modelStr := cfg.Agent.Model.Primary
+	if modelStr == "" {
+		modelStr = "(not set — run: clawtrade models setup)"
+	}
+	fmt.Printf("  Model:        %s\n", modelStr)
 	fmt.Printf("  Watchlist:    %s\n", strings.Join(cfg.Agent.Watchlist, ", "))
 	fmt.Println()
 	fmt.Println("  Start trading:")
@@ -590,6 +681,14 @@ func configShow() error {
 		}
 		fmt.Printf("│   watchlist:           %-23s│\n", wl)
 	}
+	modelDisplay := cfg.Agent.Model.Primary
+	if modelDisplay == "" {
+		modelDisplay = "(not set)"
+	}
+	if len(modelDisplay) > 23 {
+		modelDisplay = modelDisplay[:20] + "..."
+	}
+	fmt.Printf("│   model:               %-23s│\n", modelDisplay)
 	fmt.Println("│                                               │")
 	fmt.Println("│ Exchanges                                     │")
 	if len(cfg.Exchanges) == 0 {
@@ -1051,6 +1150,18 @@ func agentShow() error {
 	fmt.Printf("  Scan Interval:       %ds\n", a.ScanInterval)
 	fmt.Println()
 
+	// Model
+	fmt.Println()
+	if a.Model.Primary != "" {
+		fmt.Printf("  Model:               %s\n", a.Model.Primary)
+		fmt.Printf("  Max Tokens:          %d\n", a.Model.MaxTokens)
+		fmt.Printf("  Temperature:         %.1f\n", a.Model.Temperature)
+	} else {
+		fmt.Println("  Model:               \033[33mnot configured\033[0m")
+		fmt.Println("  Run: clawtrade models setup")
+	}
+	fmt.Println()
+
 	fmt.Println("  Sub-Agents:")
 	for _, sa := range a.SubAgents {
 		fmt.Printf("    • %s\n", sa)
@@ -1123,6 +1234,285 @@ func handleWatchlist(args []string) error {
 
 	default:
 		fmt.Println("Usage: clawtrade agent watchlist <add|remove> <SYMBOL>")
+	}
+
+	return nil
+}
+
+// ─── models (LLM provider) ───────────────────────────────────────────
+
+type providerInfo struct {
+	name     string
+	label    string
+	envKey   string
+	models   []string
+	isLocal  bool
+	baseURL  string
+}
+
+var providers = []providerInfo{
+	{name: "anthropic", label: "Anthropic (Claude)", envKey: "ANTHROPIC_API_KEY", models: []string{
+		"anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-6", "anthropic/claude-haiku-4-5",
+	}},
+	{name: "openai", label: "OpenAI (GPT)", envKey: "OPENAI_API_KEY", models: []string{
+		"openai/gpt-4o", "openai/gpt-4o-mini", "openai/o3-mini",
+	}},
+	{name: "openrouter", label: "OpenRouter (multi-model)", envKey: "OPENROUTER_API_KEY", models: []string{
+		"openrouter/anthropic/claude-sonnet-4-6", "openrouter/openai/gpt-4o", "openrouter/meta-llama/llama-4-scout",
+	}},
+	{name: "deepseek", label: "DeepSeek", envKey: "DEEPSEEK_API_KEY", models: []string{
+		"deepseek/deepseek-chat", "deepseek/deepseek-reasoner",
+	}},
+	{name: "google", label: "Google AI (Gemini)", envKey: "GOOGLE_AI_API_KEY", models: []string{
+		"google/gemini-2.5-pro", "google/gemini-2.5-flash",
+	}},
+	{name: "ollama", label: "Ollama (local)", envKey: "OLLAMA_API_KEY", isLocal: true, baseURL: "http://localhost:11434", models: []string{
+		"ollama/llama4", "ollama/qwen3", "ollama/deepseek-v3", "ollama/codellama",
+	}},
+}
+
+func handleModels(args []string) error {
+	if len(args) == 0 {
+		return modelsStatus()
+	}
+
+	switch args[0] {
+	case "setup":
+		return modelsSetup()
+	case "set":
+		if len(args) < 2 {
+			fmt.Println("Usage: clawtrade models set <provider/model>")
+			fmt.Println()
+			fmt.Println("Examples:")
+			fmt.Println("  clawtrade models set anthropic/claude-sonnet-4-6")
+			fmt.Println("  clawtrade models set openai/gpt-4o")
+			fmt.Println("  clawtrade models set ollama/llama4")
+			return nil
+		}
+		return modelsSet(args[1])
+	case "list":
+		return modelsList()
+	case "status":
+		return modelsStatus()
+	default:
+		// Treat as shorthand: clawtrade models anthropic/claude-sonnet-4-6
+		if strings.Contains(args[0], "/") {
+			return modelsSet(args[0])
+		}
+		fmt.Println("Usage: clawtrade models <setup|set|list|status>")
+		return nil
+	}
+}
+
+func modelsSetup() error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("  ╔═══════════════════════════════════════════╗")
+	fmt.Println("  ║       LLM Provider Setup                  ║")
+	fmt.Println("  ╚═══════════════════════════════════════════╝")
+	fmt.Println()
+	fmt.Println("  Select your AI provider:")
+	fmt.Println()
+
+	for i, p := range providers {
+		envStatus := ""
+		if val := os.Getenv(p.envKey); val != "" {
+			envStatus = " \033[32m(key found in env)\033[0m"
+		}
+		localTag := ""
+		if p.isLocal {
+			localTag = " [local/free]"
+		}
+		fmt.Printf("    %d. %-30s%s%s\n", i+1, p.label+localTag, envStatus, "")
+	}
+
+	fmt.Println()
+	choice := prompt("  Select provider (number or name): ")
+
+	var selected *providerInfo
+	// Try number first
+	for i, p := range providers {
+		if choice == fmt.Sprintf("%d", i+1) || strings.EqualFold(choice, p.name) {
+			selected = &providers[i]
+			break
+		}
+	}
+
+	if selected == nil {
+		return fmt.Errorf("unknown provider: %s", choice)
+	}
+
+	fmt.Printf("\n  Configuring %s\n", selected.label)
+	fmt.Println("  " + strings.Repeat("─", 35))
+
+	// API key
+	if !selected.isLocal {
+		existingKey := os.Getenv(selected.envKey)
+		if existingKey != "" {
+			masked := existingKey[:8] + "..." + existingKey[len(existingKey)-4:]
+			fmt.Printf("  Found %s in environment: %s\n", selected.envKey, masked)
+			if !promptYN("  Use this key?", true) {
+				existingKey = ""
+			}
+		}
+
+		if existingKey == "" {
+			fmt.Printf("\n  Enter your %s API key\n", selected.label)
+			fmt.Printf("  (env: %s)\n", selected.envKey)
+			apiKey := prompt("  API Key: ")
+			if apiKey == "" {
+				return fmt.Errorf("API key is required for %s", selected.label)
+			}
+			// Store in vault
+			if err := storeInVault(cfg.Vault.Path, selected.name, map[string]string{"api_key": apiKey}); err != nil {
+				fmt.Printf("  ⚠ Vault: %v\n", err)
+			} else {
+				fmt.Println("  ✓ API key stored in encrypted vault")
+			}
+		}
+	} else {
+		fmt.Println("  No API key needed for local models.")
+		fmt.Printf("  Make sure %s is running at %s\n", selected.name, selected.baseURL)
+	}
+
+	// Select model
+	fmt.Println()
+	fmt.Println("  Available models:")
+	for i, m := range selected.models {
+		fmt.Printf("    %d. %s\n", i+1, m)
+	}
+	fmt.Println()
+
+	modelChoice := promptDefault("  Select model (number or full name)", "1")
+	var modelStr string
+
+	for i, m := range selected.models {
+		if modelChoice == fmt.Sprintf("%d", i+1) {
+			modelStr = m
+			break
+		}
+	}
+	if modelStr == "" {
+		if strings.Contains(modelChoice, "/") {
+			modelStr = modelChoice
+		} else {
+			modelStr = selected.name + "/" + modelChoice
+		}
+	}
+
+	cfg.Agent.Model.Primary = modelStr
+	if err := config.Save(cfg, configPath); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("  ✓ Model set: %s\n", modelStr)
+	fmt.Println()
+	fmt.Println("  Your AI agent is ready! Start with:")
+	fmt.Println("    clawtrade serve")
+	fmt.Println()
+
+	return nil
+}
+
+func modelsSet(model string) error {
+	if !strings.Contains(model, "/") {
+		return fmt.Errorf("model must be in provider/model format (e.g. anthropic/claude-sonnet-4-6)")
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	cfg.Agent.Model.Primary = model
+	if err := config.Save(cfg, configPath); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Model set: %s\n", model)
+	return nil
+}
+
+func modelsList() error {
+	fmt.Println("Available LLM Providers")
+	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println()
+
+	for _, p := range providers {
+		envStatus := "\033[31m✗ no key\033[0m"
+		if p.isLocal {
+			envStatus = "\033[33m● local\033[0m"
+		} else if val := os.Getenv(p.envKey); val != "" {
+			envStatus = "\033[32m✓ key set\033[0m"
+		}
+		fmt.Printf("  %-25s %s\n", p.label, envStatus)
+		if !p.isLocal {
+			fmt.Printf("    env: %s\n", p.envKey)
+		}
+		for _, m := range p.models {
+			fmt.Printf("    • %s\n", m)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func modelsStatus() error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	m := cfg.Agent.Model
+	fmt.Println("Model Configuration")
+	fmt.Println(strings.Repeat("─", 40))
+
+	if m.Primary == "" {
+		fmt.Println("  ⚠ No model configured")
+		fmt.Println()
+		fmt.Println("  Quick setup:")
+		fmt.Println("    clawtrade models setup")
+		fmt.Println()
+		fmt.Println("  Or set directly:")
+		fmt.Println("    clawtrade models set anthropic/claude-sonnet-4-6")
+		return nil
+	}
+
+	fmt.Printf("  Primary:     %s\n", m.Primary)
+	fmt.Printf("  Provider:    %s\n", m.Provider())
+	fmt.Printf("  Model:       %s\n", m.ModelName())
+	fmt.Printf("  Max Tokens:  %d\n", m.MaxTokens)
+	fmt.Printf("  Temperature: %.1f\n", m.Temperature)
+	fmt.Println()
+
+	// Check API key availability
+	provider := m.Provider()
+	for _, p := range providers {
+		if p.name == provider {
+			if p.isLocal {
+				fmt.Printf("  API Key:     not required (local)\n")
+			} else if val := os.Getenv(p.envKey); val != "" {
+				fmt.Printf("  API Key:     \033[32m✓ found in %s\033[0m\n", p.envKey)
+			} else {
+				fmt.Printf("  API Key:     \033[33m⚠ not in env (%s)\033[0m\n", p.envKey)
+				fmt.Println("               May be in vault — check with: clawtrade config show")
+			}
+			break
+		}
+	}
+
+	if len(m.Fallbacks) > 0 {
+		fmt.Println()
+		fmt.Println("  Fallbacks:")
+		for _, f := range m.Fallbacks {
+			fmt.Printf("    • %s\n", f)
+		}
 	}
 
 	return nil

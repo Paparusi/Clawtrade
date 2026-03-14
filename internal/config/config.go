@@ -48,13 +48,62 @@ type ExchangeEntry struct {
 }
 
 type AgentConfig struct {
-	Enabled       bool     `yaml:"enabled"`
-	AutoTrade     bool     `yaml:"auto_trade"`
-	Confirmation  bool     `yaml:"confirmation"`
-	MinConfidence float64  `yaml:"min_confidence"`
-	ScanInterval  int      `yaml:"scan_interval"`
-	Watchlist     []string `yaml:"watchlist"`
-	SubAgents     []string `yaml:"sub_agents"`
+	Enabled       bool        `yaml:"enabled"`
+	AutoTrade     bool        `yaml:"auto_trade"`
+	Confirmation  bool        `yaml:"confirmation"`
+	MinConfidence float64     `yaml:"min_confidence"`
+	ScanInterval  int         `yaml:"scan_interval"`
+	Watchlist     []string    `yaml:"watchlist"`
+	SubAgents     []string    `yaml:"sub_agents"`
+	Model         ModelConfig `yaml:"model"`
+}
+
+type ModelConfig struct {
+	Primary     string   `yaml:"primary"`
+	Fallbacks   []string `yaml:"fallbacks,omitempty"`
+	MaxTokens   int      `yaml:"max_tokens"`
+	Temperature float64  `yaml:"temperature"`
+}
+
+// ResolveAPIKey returns the API key for the configured provider.
+// Priority: vault > env var > empty.
+func (m *ModelConfig) ResolveAPIKey() string {
+	provider := m.Provider()
+	envMap := map[string]string{
+		"anthropic":  "ANTHROPIC_API_KEY",
+		"openai":     "OPENAI_API_KEY",
+		"openrouter": "OPENROUTER_API_KEY",
+		"ollama":     "OLLAMA_API_KEY",
+		"deepseek":   "DEEPSEEK_API_KEY",
+		"google":     "GOOGLE_AI_API_KEY",
+	}
+	if envKey, ok := envMap[provider]; ok {
+		if val := os.Getenv(envKey); val != "" {
+			return val
+		}
+	}
+	return ""
+}
+
+// Provider extracts the provider name from "provider/model" format.
+func (m *ModelConfig) Provider() string {
+	if m.Primary == "" {
+		return ""
+	}
+	parts := strings.SplitN(m.Primary, "/", 2)
+	return parts[0]
+}
+
+// ModelName extracts the model name from "provider/model" format.
+func (m *ModelConfig) ModelName() string {
+	if m.Primary == "" {
+		return ""
+	}
+	parts := strings.SplitN(m.Primary, "/", 2)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return m.Primary
 }
 
 type NotificationsConfig struct {
@@ -95,6 +144,11 @@ func defaultConfig() *Config {
 			MinConfidence: 0.7, ScanInterval: 30,
 			Watchlist: []string{"BTC/USDT", "ETH/USDT"},
 			SubAgents: []string{"market-scanner", "risk-manager", "portfolio-optimizer", "news-analyst", "execution-engine"},
+			Model: ModelConfig{
+				Primary:     "",
+				MaxTokens:   4096,
+				Temperature: 0.7,
+			},
 		},
 		Notifications: NotificationsConfig{
 			Alerts: AlertsConfig{
@@ -224,6 +278,10 @@ func (c *Config) SetField(key, value string) error {
 			}
 			c.Agent.ScanInterval = v
 		default:
+			// Check for agent.model.* sub-fields
+			if strings.HasPrefix(field, "model.") {
+				return c.setModelField(strings.TrimPrefix(field, "model."), value)
+			}
 			return fmt.Errorf("unknown agent field: %s", field)
 		}
 	case "notifications":
@@ -233,12 +291,43 @@ func (c *Config) SetField(key, value string) error {
 			return c.setNotificationField(subParts[0], subParts[1], value)
 		}
 		return c.setNotificationField(field, "", value)
+	case "models":
+		return c.setModelField(field, value)
 	case "telegram":
 		return c.setNotificationField("telegram", field, value)
 	case "discord":
 		return c.setNotificationField("discord", field, value)
 	default:
-		return fmt.Errorf("unknown section: %s (available: server, database, vault, risk, agent, notifications, telegram, discord)", section)
+		return fmt.Errorf("unknown section: %s (available: server, database, vault, risk, agent, models, notifications, telegram, discord)", section)
+	}
+	return nil
+}
+
+func (c *Config) setModelField(field, value string) error {
+	switch field {
+	case "primary":
+		// Validate provider/model format
+		if !strings.Contains(value, "/") && value != "" {
+			return fmt.Errorf("model must be in provider/model format (e.g. anthropic/claude-sonnet-4-6)")
+		}
+		c.Agent.Model.Primary = value
+	case "max_tokens":
+		v, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("must be an integer: %w", err)
+		}
+		c.Agent.Model.MaxTokens = v
+	case "temperature":
+		v, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return fmt.Errorf("must be a number: %w", err)
+		}
+		if v < 0 || v > 2 {
+			return fmt.Errorf("temperature must be between 0 and 2")
+		}
+		c.Agent.Model.Temperature = v
+	default:
+		return fmt.Errorf("unknown model field: %s (available: primary, max_tokens, temperature)", field)
 	}
 	return nil
 }
