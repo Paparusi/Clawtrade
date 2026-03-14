@@ -9,6 +9,12 @@ import MarketOverview from './components/MarketOverview'
 import ExchangeStatus from './components/ExchangeStatus'
 import AgentStatus from './components/AgentStatus'
 import SettingsPanel from './components/SettingsPanel'
+import PerformanceChart from './components/PerformanceChart'
+import RiskAnalysis from './components/RiskAnalysis'
+import AssetAllocation from './components/AssetAllocation'
+import MonthlyReturns from './components/MonthlyReturns'
+import TopMovers from './components/TopMovers'
+import DrawdownChart from './components/DrawdownChart'
 
 export default function App() {
   const [tab, setTab] = useState('dashboard')
@@ -31,6 +37,7 @@ export default function App() {
               <PositionsTable />
             </div>
           )}
+          {tab === 'analytics' && <AnalyticsView />}
           {tab === 'strategies' && <StrategiesPlaceholder />}
           {tab === 'settings' && <SettingsPanel />}
         </main>
@@ -70,6 +77,36 @@ function DashboardView() {
         <div style={{ flex: 1, minHeight: 0 }}>
           <MarketOverview />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function AnalyticsView() {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gridTemplateRows: 'minmax(280px, 1fr) minmax(220px, auto) minmax(180px, auto)',
+      gap: 12,
+      width: '100%',
+      height: 'calc(100vh - 88px)',
+      minHeight: 0,
+    }}>
+      {/* Row 1: Performance Chart + Risk Analysis */}
+      <PerformanceChart />
+      <RiskAnalysis />
+
+      {/* Row 2: Asset Allocation + Monthly Returns + Top Movers */}
+      <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr', gap: 12, minHeight: 0 }}>
+        <AssetAllocation />
+        <MonthlyReturns />
+        <TopMovers />
+      </div>
+
+      {/* Row 3: Drawdown Chart - full width */}
+      <div style={{ gridColumn: '1 / -1', minHeight: 0 }}>
+        <DrawdownChart />
       </div>
     </div>
   )

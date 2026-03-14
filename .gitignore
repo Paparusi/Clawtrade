@@ -16,7 +16,6 @@ dist/
 .env
 
 # Screenshots / temp
-*.png
 *.exe~
 .playwright-mcp/
 

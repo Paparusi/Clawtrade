@@ -4,6 +4,12 @@
 
 Self-hosted, open-source. One platform for Binance, Bybit, OKX, MetaTrader 5, Interactive Brokers, Hyperliquid, and Uniswap.
 
+![Dashboard](docs/screenshots/dashboard.png)
+
+![Analytics](docs/screenshots/analytics.png)
+
+![Agent Chat](docs/screenshots/agent-chat.png)
+
 ---
 
 ## Quick Start
