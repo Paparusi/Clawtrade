@@ -34,7 +34,7 @@ Open **http://localhost:9090** for the web dashboard.
 ### Multi-Asset Trading
 - **Crypto CEX** — Binance, Bybit, OKX (spot, futures, margin)
 - **Crypto DEX** — Uniswap, Hyperliquid, Jupiter
-- **Forex/CFD** — MetaTrader 5 bridge
+- **Forex/CFD** — MetaTrader 5 (via Python API, auto-setup)
 - **Stocks** — Interactive Brokers gateway
 - **Paper Trading** — Simulated mode for risk-free testing
 
@@ -160,6 +160,8 @@ clawtrade exchange test binance      # Validate config
 ```
 
 Supported: `binance`, `bybit`, `okx`, `mt5`, `ibkr`, `hyperliquid`, `uniswap`
+
+> **MetaTrader 5**: Install the [MT5 terminal](https://www.metatrader5.com/en/download) (Windows only). Clawtrade auto-installs the Python bridge and connects — just provide your login, password, and server name.
 
 ### Configuration
 ```bash
