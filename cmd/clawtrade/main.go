@@ -425,6 +425,19 @@ func serve() error {
 	alertSvc := alert.NewService(alertMgr)
 	srv.SetAlertService(alertSvc)
 
+	// Start daily briefing if configured
+	if cfg.Notifications.Alerts.DailyBriefing && tgBot != nil {
+		chatID := alert.ParseChatID(cfg.Notifications.Telegram.ChatID)
+		alert.StartDailyBriefing(ctx, alert.BriefingConfig{
+			HourUTC:  cfg.Notifications.Alerts.BriefingHourUTC,
+			TgBot:    tgBot,
+			ChatID:   chatID,
+			Adapters: adapters,
+			Store:    alertStore,
+		})
+		fmt.Printf("Daily briefing: enabled at %02d:00 UTC\n", cfg.Notifications.Alerts.BriefingHourUTC)
+	}
+
 	// Listen for sub-agent events and feed insights into the context builder
 	eventTypes := []string{"analysis", "counter_analysis", "narrative", "reflection", "correlation"}
 	for _, et := range eventTypes {
