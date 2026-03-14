@@ -52,6 +52,7 @@ function buildStats(balances: BalanceData[], positions: PositionData[], totalPnl
 export default function PortfolioSummary() {
   const { subscribe } = useWS()
   const [stats, setStats] = useState<StatItem[]>(FALLBACK)
+  const [exchanges, setExchanges] = useState<Record<string, { total: number }>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -74,32 +75,51 @@ export default function PortfolioSummary() {
       if (balances.length || positions.length) {
         setStats(buildStats(balances, positions, totalPnl))
       }
+      if (data.exchanges) {
+        setExchanges(data.exchanges as Record<string, { total: number }>)
+      }
     })
   }, [subscribe])
 
+  const exchangeNames = Object.keys(exchanges)
+
   return (
-    <div className="card fade-in grid grid-cols-4">
-      {stats.map((s, i) => (
-        <div
-          key={s.label}
-          className={`px-6 py-4 ${i < stats.length - 1 ? 'border-r border-white/[0.06]' : ''}`}
-        >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[11px] text-[var(--text-3)] font-medium">{s.label}</span>
-            <span className={`mono text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-              s.up ? 'text-[#10b981] bg-[rgba(16,185,129,0.08)]' : 'text-[#ef4444] bg-[rgba(239,68,68,0.08)]'
+    <div className="card fade-in">
+      <div className="grid grid-cols-4">
+        {stats.map((s, i) => (
+          <div
+            key={s.label}
+            className={`px-6 py-4 ${i < stats.length - 1 ? 'border-r border-white/[0.06]' : ''}`}
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] text-[var(--text-3)] font-medium">{s.label}</span>
+              <span className={`mono text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                s.up ? 'text-[#10b981] bg-[rgba(16,185,129,0.08)]' : 'text-[#ef4444] bg-[rgba(239,68,68,0.08)]'
+              }`}>
+                {s.pct}
+              </span>
+            </div>
+            <div className={`mono text-[22px] font-extrabold tracking-tight leading-none ${
+              s.label.includes('P&L') ? (s.up ? 'text-[#10b981]' : 'text-[#ef4444]') : 'text-[var(--text-1)]'
             }`}>
-              {s.pct}
+              {s.value}
+            </div>
+            <div className="text-[10px] text-[var(--text-3)] mt-1.5">{s.change}</div>
+          </div>
+        ))}
+      </div>
+      {exchangeNames.length >= 2 && (
+        <div className="px-6 py-3 border-t border-white/[0.06] flex items-center gap-2 flex-wrap">
+          {exchangeNames.map((name) => (
+            <span
+              key={name}
+              className="text-[10px] font-medium px-2 py-0.5 rounded bg-white/[0.04] text-[var(--text-2)]"
+            >
+              {name.charAt(0).toUpperCase() + name.slice(1)} · {fmtUsd(exchanges[name].total)}
             </span>
-          </div>
-          <div className={`mono text-[22px] font-extrabold tracking-tight leading-none ${
-            s.label.includes('P&L') ? (s.up ? 'text-[#10b981]' : 'text-[#ef4444]') : 'text-[var(--text-1)]'
-          }`}>
-            {s.value}
-          </div>
-          <div className="text-[10px] text-[var(--text-3)] mt-1.5">{s.change}</div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
 }

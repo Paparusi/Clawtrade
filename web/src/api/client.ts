@@ -92,6 +92,21 @@ export async function fetchExchanges() {
   return get<ExchangeInfo[]>('/exchanges')
 }
 
+export interface PortfolioData {
+  balances: BalanceData[]
+  positions: PositionData[]
+  total_pnl: number
+  exchanges: Record<string, {
+    total: number
+    balances: BalanceData[]
+    positions: PositionData[]
+  }>
+}
+
+export async function fetchPortfolio() {
+  return get<PortfolioData>('/portfolio')
+}
+
 // ─── WebSocket ─────────────────────────────────────────────────────
 
 export interface WSMessage {
