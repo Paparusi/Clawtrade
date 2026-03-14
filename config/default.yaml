@@ -1,17 +1,42 @@
-# config/default.yaml
 server:
-  host: "127.0.0.1"
-  port: 9090
-
+    host: 127.0.0.1
+    port: 8899
 database:
-  path: "data/clawtrade.db"
-
+    path: data/clawtrade.db
 vault:
-  path: "data/vault.enc"
-
+    path: data/vault.enc
 risk:
-  max_risk_per_trade: 0.02
-  max_daily_loss: 0.05
-  max_positions: 5
-  max_leverage: 10
-  default_mode: "paper"
+    max_risk_per_trade: 0.02
+    max_daily_loss: 0.05
+    max_positions: 5
+    max_leverage: 10
+    default_mode: paper
+exchanges: []
+agent:
+    enabled: true
+    auto_trade: false
+    confirmation: true
+    min_confidence: 0.7
+    scan_interval: 30
+    watchlist:
+        - BTC/USDT
+        - ETH/USDT
+    sub_agents:
+        - market-scanner
+        - risk-manager
+        - portfolio-optimizer
+        - news-analyst
+        - execution-engine
+notifications:
+    telegram:
+        enabled: false
+        token: ""
+        chat_id: ""
+    discord:
+        enabled: false
+        webhook_url: ""
+    alerts:
+        trade_executed: true
+        risk_alert: true
+        pnl_update: false
+        system_alert: true

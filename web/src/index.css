@@ -1,8 +1,60 @@
 @import "tailwindcss";
 
-body {
-  margin: 0;
-  background-color: #0f172a;
-  color: #e2e8f0;
-  font-family: system-ui, -apple-system, sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-0: #09090b;
+  --bg-1: #0c0c0f;
+  --bg-2: #18181b;
+  --bg-3: #27272a;
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.1);
+  --text-1: #fafafa;
+  --text-2: #a1a1aa;
+  --text-3: #52525b;
+  --accent: #6366f1;
+  --accent-2: #818cf8;
 }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: clamp(14px, 0.85vw, 18px);
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text-2);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Cards */
+.card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+}
+.card:hover { border-color: var(--border-hover); }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.fade-in { animation: fadeIn 0.35s ease-out both; }
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
