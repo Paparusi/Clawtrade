@@ -22,11 +22,26 @@ agent:
         - BTC/USDT
         - ETH/USDT
     sub_agents:
-        - market-scanner
-        - risk-manager
-        - portfolio-optimizer
-        - news-analyst
-        - execution-engine
+        - name: market-analyst
+          enabled: true
+          scan_interval: 300
+          model: ""
+        - name: devils-advocate
+          enabled: true
+          scan_interval: 0
+          model: ""
+        - name: narrative
+          enabled: true
+          scan_interval: 900
+          model: ""
+        - name: reflection
+          enabled: true
+          scan_interval: 300
+          model: ""
+        - name: correlation
+          enabled: true
+          scan_interval: 600
+          model: ""
     model:
         primary: ""
         max_tokens: 4096

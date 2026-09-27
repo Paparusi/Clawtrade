@@ -239,6 +239,9 @@ func serve() error {
 
 	// Resolve the default API key for sub-agent LLM calls
 	defaultAPIKey := cfg.Agent.Model.ResolveAPIKey()
+	if defaultAPIKey == "" {
+		defaultAPIKey = agent.VaultAPIKey(cfg, cfg.Agent.Model.Provider())
+	}
 	defaultModel := cfg.Agent.Model.Primary
 
 	// Load strategies from directory or use built-in defaults
@@ -1581,6 +1584,9 @@ var providers = []providerInfo{
 	{name: "ollama", label: "Ollama (local)", envKey: "OLLAMA_API_KEY", isLocal: true, baseURL: "http://localhost:11434", models: []string{
 		"ollama/llama4", "ollama/qwen3", "ollama/deepseek-v3", "ollama/codellama",
 	}},
+	{name: "opencode", label: "OpenCode Zen (OpenAI-compatible)", envKey: "OPENCODE_API_KEY", baseURL: "https://opencode.ai/zen/go/v1", models: []string{
+		"opencode/deepseek-v4.1-flash", "opencode/deepseek-v4-flash", "opencode/glm-5.3", "opencode/kimi-k3",
+	}},
 }
 
 func handleModels(args []string) error {
@@ -1751,6 +1757,7 @@ func modelsSet(model string) error {
 }
 
 func modelsList() error {
+	vaultCfg, _ := config.Load(configPath)
 	fmt.Println("Available LLM Providers")
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
@@ -1761,6 +1768,8 @@ func modelsList() error {
 			envStatus = "\033[33m● local\033[0m"
 		} else if val := os.Getenv(p.envKey); val != "" {
 			envStatus = "\033[32m✓ key set\033[0m"
+		} else if agent.VaultAPIKey(vaultCfg, p.name) != "" {
+			envStatus = "\033[32m✓ key set (vault)\033[0m"
 		}
 		fmt.Printf("  %-25s %s\n", p.label, envStatus)
 		if !p.isLocal {
@@ -1811,6 +1820,8 @@ func modelsStatus() error {
 				fmt.Printf("  API Key:     not required (local)\n")
 			} else if val := os.Getenv(p.envKey); val != "" {
 				fmt.Printf("  API Key:     \033[32m✓ found in %s\033[0m\n", p.envKey)
+			} else if agent.VaultAPIKey(cfg, provider) != "" {
+				fmt.Printf("  API Key:     \033[32m✓ found in vault (%s/api_key)\033[0m\n", provider)
 			} else {
 				fmt.Printf("  API Key:     \033[33m⚠ not in env (%s)\033[0m\n", p.envKey)
 				fmt.Println("               May be in vault — check with: clawtrade config show")
@@ -2165,6 +2176,7 @@ func getExchangeType(name string) string {
 
 func storeInVault(vaultPath, namespace string, fields map[string]string) error {
 	secretFields := map[string]bool{
+		"api_key":     true,
 		"api_secret":  true,
 		"private_key": true,
 		"password":    true,
