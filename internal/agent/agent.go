@@ -75,6 +75,9 @@ func (a *Agent) SetAlertService(svc AlertService) {
 func (a *Agent) Run(ctx context.Context, messages []Message) (*Response, error) {
 	provider := a.cfg.Agent.Model.Provider()
 	apiKey := a.cfg.Agent.Model.ResolveAPIKey()
+	if apiKey == "" {
+		apiKey = VaultAPIKey(a.cfg, provider)
+	}
 	model := a.cfg.Agent.Model.ModelName()
 
 	if provider == "" || model == "" {
@@ -94,13 +97,8 @@ func (a *Agent) Run(ctx context.Context, messages []Message) (*Response, error) 
 	switch provider {
 	case "anthropic":
 		return a.runAnthropic(ctx, apiKey, model, systemPrompt, messages, toolDefs, allToolsUsed, totalUsage)
-	case "openai", "deepseek", "openrouter", "ollama":
-		baseURL := map[string]string{
-			"openai":     "https://api.openai.com/v1",
-			"deepseek":   "https://api.deepseek.com/v1",
-			"openrouter": "https://openrouter.ai/api/v1",
-			"ollama":     "http://localhost:11434/v1",
-		}[provider]
+	case "openai", "deepseek", "openrouter", "ollama", "opencode", "opencode-go", "openai-compatible", "custom":
+		baseURL := OpenAIBaseURL(provider)
 		return a.runOpenAI(ctx, baseURL, apiKey, model, systemPrompt, messages, toolDefs, allToolsUsed, totalUsage)
 	case "google":
 		return a.runGoogle(ctx, apiKey, model, systemPrompt, messages, toolDefs, allToolsUsed, totalUsage)
@@ -295,6 +293,9 @@ func (a *Agent) runOpenAI(ctx context.Context, baseURL, apiKey, model, systemPro
 		req.Header.Set("Content-Type", "application/json")
 		if apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+		if strings.Contains(baseURL, "opencode.ai") {
+			req.Header.Set("x-opencode-session", LLMSessionID())
 		}
 
 		resp, err := http.DefaultClient.Do(req)

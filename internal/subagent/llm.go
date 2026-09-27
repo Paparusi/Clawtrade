@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -33,14 +34,27 @@ func NewLLMCaller(modelString, apiKey string, maxTokens int) *LLMCaller {
 		model = parts[1]
 	}
 
+	openAICompatible := map[string]bool{
+		"openai": true, "deepseek": true, "openrouter": true, "ollama": true,
+		"opencode": true, "opencode-go": true, "openai-compatible": true, "custom": true,
+	}
 	baseURL := map[string]string{
-		"anthropic":  "https://api.anthropic.com/v1/messages",
-		"openai":     "https://api.openai.com/v1/chat/completions",
-		"deepseek":   "https://api.deepseek.com/v1/chat/completions",
-		"openrouter": "https://openrouter.ai/api/v1/chat/completions",
-		"ollama":     "http://localhost:11434/v1/chat/completions",
-		"google":     "https://generativelanguage.googleapis.com/v1beta",
+		"anthropic":         "https://api.anthropic.com/v1/messages",
+		"openai":            "https://api.openai.com/v1/chat/completions",
+		"deepseek":          "https://api.deepseek.com/v1/chat/completions",
+		"openrouter":        "https://openrouter.ai/api/v1/chat/completions",
+		"ollama":            "http://localhost:11434/v1/chat/completions",
+		"google":            "https://generativelanguage.googleapis.com/v1beta",
+		"opencode":          "https://opencode.ai/zen/go/v1/chat/completions",
+		"opencode-go":       "https://opencode.ai/zen/go/v1/chat/completions",
+		"openai-compatible": "https://opencode.ai/zen/go/v1/chat/completions",
+		"custom":            "https://opencode.ai/zen/go/v1/chat/completions",
 	}[provider]
+	if openAICompatible[provider] {
+		if override := strings.TrimSpace(os.Getenv("CLAWTRADE_LLM_BASE_URL")); override != "" {
+			baseURL = strings.TrimRight(override, "/") + "/chat/completions"
+		}
+	}
 
 	return &LLMCaller{
 		Provider:  provider,
@@ -57,7 +71,7 @@ func (c *LLMCaller) Call(ctx context.Context, systemPrompt, userMessage string) 
 	switch c.Provider {
 	case "anthropic":
 		return c.callAnthropic(ctx, systemPrompt, userMessage)
-	case "openai", "deepseek", "openrouter", "ollama":
+	case "openai", "deepseek", "openrouter", "ollama", "opencode", "opencode-go", "openai-compatible", "custom":
 		return c.callOpenAI(ctx, systemPrompt, userMessage)
 	case "google":
 		return c.callGoogle(ctx, systemPrompt, userMessage)
@@ -145,6 +159,9 @@ func (c *LLMCaller) callOpenAI(ctx context.Context, systemPrompt, userMessage st
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" && c.Provider != "ollama" {
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	if strings.Contains(c.BaseURL, "opencode.ai") {
+		req.Header.Set("x-opencode-session", llmSessionID())
 	}
 
 	resp, err := http.DefaultClient.Do(req)

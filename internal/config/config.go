@@ -107,11 +107,19 @@ func (m *ModelConfig) ResolveAPIKey() string {
 		"ollama":     "OLLAMA_API_KEY",
 		"deepseek":   "DEEPSEEK_API_KEY",
 		"google":     "GOOGLE_AI_API_KEY",
+		// OpenAI-compatible endpoints (opencode.ai/zen and friends)
+		"opencode":          "OPENCODE_API_KEY",
+		"opencode-go":       "OPENCODE_API_KEY",
+		"openai-compatible": "OPENAI_COMPATIBLE_API_KEY",
+		"custom":            "CLAWTRADE_LLM_API_KEY",
 	}
 	if envKey, ok := envMap[provider]; ok {
 		if val := os.Getenv(envKey); val != "" {
 			return val
 		}
+	}
+	if val := os.Getenv("CLAWTRADE_LLM_API_KEY"); val != "" {
+		return val
 	}
 	return ""
 }
